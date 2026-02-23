@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module tb_ebeam_pixel_core;
+module tb_um_ebeam_pixel_core;
     reg clk = 0;
     always #10 clk = ~clk; // 50 MHz
 
@@ -324,4 +324,5 @@ module tb_ebeam_pixel_core;
 
         $finish;
     end
+
 endmodule
