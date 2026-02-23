@@ -74,7 +74,7 @@ module tt_um_ebeam_pixel_core (
     reg  [7:0] cfg_wr_data_ff1,   cfg_wr_data_ff2;
     wire       cfg_wr_pulse = cfg_wr_toggle_ff2 ^ cfg_wr_toggle_ff2_d;
 
-    always @(posedge clk) begin
+    always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             cfg_wr_toggle_ff1   <= 1'b0;
             cfg_wr_toggle_ff2   <= 1'b0;
@@ -288,7 +288,7 @@ module tt_um_ebeam_pixel_core (
                            : (mean_q + mean_delta[7:0]);
 
     // Sequential logic
-    always @(posedge clk) begin
+    always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             pixel_q           <= 8'd0;
             prev_pixel        <= 8'd0;
