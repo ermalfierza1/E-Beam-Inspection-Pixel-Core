@@ -34,7 +34,7 @@ COMPILE_ARGS 		+= -I$(SRC_DIR)
 
 # Include the testbench sources:
 VERILOG_SOURCES += $(PWD)/tb_um_ebeam_pixel_core.v
-TOPLEVEL = tb
+TOPLEVEL = tb_um_ebeam_pixel_core
 
 # List test modules to run, separated by commas and without the .py suffix:
 COCOTB_TEST_MODULES = test
