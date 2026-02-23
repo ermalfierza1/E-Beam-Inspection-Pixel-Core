@@ -74,7 +74,7 @@ module tt_um_ebeam_pixel_core (
     reg  [7:0] cfg_wr_data_ff1,   cfg_wr_data_ff2;
     wire       cfg_wr_pulse = cfg_wr_toggle_ff2 ^ cfg_wr_toggle_ff2_d;
 
-    always @(posedge clk or negedge rst_n) begin
+    always @(posedge clk) begin
         if (!rst_n) begin
             cfg_wr_toggle_ff1   <= 1'b0;
             cfg_wr_toggle_ff2   <= 1'b0;
@@ -143,7 +143,7 @@ module tt_um_ebeam_pixel_core (
     reg  [63:0] spi_rd_bus_ff1;
     reg  [63:0] spi_rd_bus_ff2;
 
-    always @(posedge cfg_sclk or negedge rst_n) begin
+    always @(posedge cfg_sclk) begin
         if (!rst_n) begin
             spi_rd_bus_ff1 <= 64'h0;
             spi_rd_bus_ff2 <= 64'h0;
@@ -164,7 +164,14 @@ module tt_um_ebeam_pixel_core (
 
     wire [7:0] spi_shift_in_next = {spi_shift_in[6:0], cfg_mosi};
 
-    always @(posedge cfg_sclk or posedge cfg_cs_n or negedge rst_n) begin
+    reg cfg_cs_n_prev;
+    always @(posedge cfg_sclk or negedge rst_n) begin
+        if (!rst_n) cfg_cs_n_prev <= 1'b1;
+        else cfg_cs_n_prev <= cfg_cs_n;
+    end
+    wire cfg_cs_rise = !cfg_cs_n_prev && cfg_cs_n;
+
+    always @(posedge cfg_sclk) begin
         if (!rst_n) begin
             spi_shift_in  <= 8'h00;
             spi_bitcnt    <= 4'd0;
@@ -176,7 +183,7 @@ module tt_um_ebeam_pixel_core (
             spi_wr_data   <= 8'h00;
             spi_shift_out_load         <= 8'h00;
             spi_shift_out_load_pending <= 1'b0;
-        end else if (cfg_cs_n) begin
+        end else if (cfg_cs_rise) begin
             spi_bitcnt    <= 4'd0;
             spi_cmd_phase <= 1'b1;
             spi_cmd_wr    <= 1'b0;
@@ -223,12 +230,10 @@ module tt_um_ebeam_pixel_core (
 
     // Mode-0 MISO timing: update/shift on falling edge so it is stable at the next
     // rising edge when the master samples.
-    always @(negedge cfg_sclk or posedge cfg_cs_n or negedge rst_n) begin
-        if (!rst_n) begin
+    always @(negedge cfg_sclk) begin
+        if (!rst_n || cfg_cs_rise) begin
             cfg_miso      <= 1'b0;
             spi_shift_out <= 8'h00;
-        end else if (cfg_cs_n) begin
-            cfg_miso      <= 1'b0;
         end else begin
             if (spi_shift_out_load_pending) begin
                 cfg_miso                   <= spi_shift_out_load[7];
@@ -283,7 +288,7 @@ module tt_um_ebeam_pixel_core (
                            : (mean_q + mean_delta[7:0]);
 
     // Sequential logic
-    always @(posedge clk or negedge rst_n) begin
+    always @(posedge clk) begin
         if (!rst_n) begin
             pixel_q           <= 8'd0;
             prev_pixel        <= 8'd0;
