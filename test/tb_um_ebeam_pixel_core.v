@@ -324,5 +324,4 @@ module tb_um_ebeam_pixel_core;
 
         $finish;
     end
-
 endmodule
