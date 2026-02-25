@@ -165,14 +165,10 @@ module tt_um_ebeam_pixel_core (
     wire [7:0] spi_shift_in_next = {spi_shift_in[6:0], cfg_mosi};
 
     reg cfg_cs_n_prev;
-    always @(posedge cfg_sclk or negedge rst_n) begin
-        if (!rst_n) cfg_cs_n_prev <= 1'b1;
-        else cfg_cs_n_prev <= cfg_cs_n;
-    end
-    wire cfg_cs_rise = !cfg_cs_n_prev && cfg_cs_n;
 
-    always @(posedge cfg_sclk) begin
+    always @(posedge cfg_sclk or negedge rst_n) begin
         if (!rst_n) begin
+            cfg_cs_n_prev <= 1'b1;
             spi_shift_in  <= 8'h00;
             spi_bitcnt    <= 4'd0;
             spi_cmd_phase <= 1'b1;
@@ -183,55 +179,68 @@ module tt_um_ebeam_pixel_core (
             spi_wr_data   <= 8'h00;
             spi_shift_out_load         <= 8'h00;
             spi_shift_out_load_pending <= 1'b0;
-        end else if (cfg_cs_rise) begin
-            spi_bitcnt    <= 4'd0;
-            spi_cmd_phase <= 1'b1;
-            spi_cmd_wr    <= 1'b0;
-            spi_cmd_addr  <= 3'd0;
-            spi_shift_out_load_pending <= 1'b0;
         end else begin
-            spi_shift_in <= spi_shift_in_next;
             spi_shift_out_load_pending <= 1'b0;
 
-            if (spi_bitcnt == 4'd7) begin
-                spi_bitcnt <= 4'd0;
-                if (spi_cmd_phase) begin
-                    spi_cmd_phase <= 1'b0;
-                    spi_cmd_wr    <= spi_shift_in_next[7];
-                    spi_cmd_addr  <= spi_shift_in_next[6:4];
+            if (cfg_cs_n) begin
+                spi_bitcnt    <= 4'd0;
+                spi_cmd_phase <= 1'b1;
+                spi_cmd_wr    <= 1'b0;
+                spi_cmd_addr  <= 3'd0;
+            end else if (cfg_cs_n_prev) begin
+                spi_shift_in  <= {7'b0, cfg_mosi};
+                spi_bitcnt    <= 4'd1;
+                spi_cmd_phase <= 1'b1;
+                spi_cmd_wr    <= 1'b0;
+                spi_cmd_addr  <= 3'd0;
+            end else begin
+                spi_shift_in <= spi_shift_in_next;
 
-                    if (spi_shift_in_next[7] == 1'b0) begin
-                        case (spi_shift_in_next[6:4])
-                            3'h0: spi_shift_out_load <= spi_rd_reg0;
-                            3'h1: spi_shift_out_load <= spi_rd_reg1;
-                            3'h2: spi_shift_out_load <= spi_rd_reg2;
-                            3'h3: spi_shift_out_load <= spi_rd_reg3;
-                            3'h4: spi_shift_out_load <= spi_rd_reg4;
-                            3'h5: spi_shift_out_load <= spi_rd_reg5;
-                            3'h6: spi_shift_out_load <= spi_rd_reg6;
-                            3'h7: spi_shift_out_load <= spi_rd_reg7;
-                            default: spi_shift_out_load <= 8'h00;
-                        endcase
-                        spi_shift_out_load_pending <= 1'b1;
+                if (spi_bitcnt == 4'd7) begin
+                    spi_bitcnt <= 4'd0;
+                    if (spi_cmd_phase) begin
+                        spi_cmd_phase <= 1'b0;
+                        spi_cmd_wr    <= spi_shift_in_next[7];
+                        spi_cmd_addr  <= spi_shift_in_next[6:4];
+
+                        if (spi_shift_in_next[7] == 1'b0) begin
+                            case (spi_shift_in_next[6:4])
+                                3'h0: spi_shift_out_load <= spi_rd_reg0;
+                                3'h1: spi_shift_out_load <= spi_rd_reg1;
+                                3'h2: spi_shift_out_load <= spi_rd_reg2;
+                                3'h3: spi_shift_out_load <= spi_rd_reg3;
+                                3'h4: spi_shift_out_load <= spi_rd_reg4;
+                                3'h5: spi_shift_out_load <= spi_rd_reg5;
+                                3'h6: spi_shift_out_load <= spi_rd_reg6;
+                                3'h7: spi_shift_out_load <= spi_rd_reg7;
+                                default: spi_shift_out_load <= 8'h00;
+                            endcase
+                            spi_shift_out_load_pending <= 1'b1;
+                        end
+                    end else begin
+                        spi_cmd_phase <= 1'b1;
+                        if (spi_cmd_wr) begin
+                            spi_wr_addr   <= spi_cmd_addr;
+                            spi_wr_data   <= spi_shift_in_next;
+                            spi_wr_toggle <= ~spi_wr_toggle;
+                        end
                     end
                 end else begin
-                    spi_cmd_phase <= 1'b1;
-                    if (spi_cmd_wr) begin
-                        spi_wr_addr   <= spi_cmd_addr;
-                        spi_wr_data   <= spi_shift_in_next;
-                        spi_wr_toggle <= ~spi_wr_toggle;
-                    end
+                    spi_bitcnt <= spi_bitcnt + 1'b1;
                 end
-            end else begin
-                spi_bitcnt <= spi_bitcnt + 1'b1;
             end
+
+            cfg_cs_n_prev <= cfg_cs_n;
         end
     end
 
     // Mode-0 MISO timing: update/shift on falling edge so it is stable at the next
     // rising edge when the master samples.
-    always @(negedge cfg_sclk) begin
-        if (!rst_n || cfg_cs_rise) begin
+    always @(negedge cfg_sclk or negedge rst_n) begin
+        if (!rst_n) begin
+            cfg_miso      <= 1'b0;
+            spi_shift_out <= 8'h00;
+        end else if (cfg_cs_n) begin
             cfg_miso      <= 1'b0;
             spi_shift_out <= 8'h00;
         end else begin
