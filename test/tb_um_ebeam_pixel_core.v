@@ -1,8 +1,15 @@
 `timescale 1ns/1ps
 
 module tb_um_ebeam_pixel_core;
+`ifdef GL_TEST
+    localparam integer CLK_HALF = 100;
+`else
+    localparam integer CLK_HALF = 10;
+`endif
+    localparam integer CLK_PERIOD = 2*CLK_HALF;
+
     reg clk = 0;
-    always #10 clk = ~clk; // 50 MHz
+    always #(CLK_HALF) clk = ~clk;
 
     reg rst_n = 0;
     reg ena   = 1;
@@ -70,9 +77,9 @@ module tb_um_ebeam_pixel_core;
             t = tx; r = 8'h00;
             for (i=7; i>=0; i=i-1) begin
                 mosi = t[i];
-                #5; sclk = 1; #5; // rising edge: sample MOSI, shift out MISO
+                #(5); sclk = 1; #(5); // rising edge: sample MOSI, shift out MISO
                 r[i] = cfg_miso;
-                sclk = 0; #10;
+                sclk = 0; #(10);
             end
             rx = r;
         end
@@ -81,10 +88,10 @@ module tb_um_ebeam_pixel_core;
     task spi_write(input [2:0] addr, input [7:0] data);
         reg [7:0] r;
         begin
-            csn = 0; #20;
+            csn = 0; #(20);
             spi_byte_inout({1'b1, addr, 4'b0000}, r);
             spi_byte_inout(data, r);
-            csn = 1; #100;
+            csn = 1; #(100);
 
             case (addr)
                 3'h0: sb_reg_thresh       = data;
@@ -100,10 +107,10 @@ module tb_um_ebeam_pixel_core;
     task spi_read(input [2:0] addr, output [7:0] data);
         reg [7:0] r;
         begin
-            csn = 0; #20;
+            csn = 0; #(20);
             spi_byte_inout({1'b0, addr, 4'b0000}, r);
             spi_byte_inout(8'h00, data);
-            csn = 1; #100;
+            csn = 1; #(100);
         end
     endtask
 
@@ -120,17 +127,19 @@ module tb_um_ebeam_pixel_core;
 
     task thresh_step(input [7:0] pix, input do_check_prev);
         begin
+            @(negedge clk);
             ui_in = pix;
             @(posedge clk);
-            #1;
+            #(1);
         end
     endtask
 
     task passthrough_step(input [7:0] pix);
         begin
+            @(negedge clk);
             ui_in = pix;
             @(posedge clk);
-            #1;
+            #(1);
         end
     endtask
 
@@ -215,8 +224,8 @@ module tb_um_ebeam_pixel_core;
         end
     end
 
-    always @(posedge clk) begin
-        #1;
+    always @(negedge clk) begin
+        #(9);
         if (sb_check_valid) begin
             if (uo_out !== sb_exp_uo) begin
                 $display("SB_MISM t=%0t mode=%b pix_in=%0d fs=%0d pix_q=%0d mean=%0d prev=%0d got=%b exp=%b",
@@ -233,11 +242,12 @@ module tb_um_ebeam_pixel_core;
         // Init
         ui_in = 8'd0; pix_valid=0; frame_start=0;
         csn=1; sclk=0; mosi=0;
+
         pass_cnt = 0;
         fail_cnt = 0;
 
         // Reset
-        #100; rst_n = 1;
+        #(5*CLK_PERIOD); rst_n = 1;
 
         // Configure thresholds: contrast=20, edge=20, alpha_shift=3
         spi_write(3'h1, 8'd20);
@@ -253,12 +263,20 @@ module tb_um_ebeam_pixel_core;
         check8(rd, 8'd0);
 
         // Send a line: background 80, abrupt step to 160 at sample 40, a bright blip 230 at 60
-        frame_start = 1; pix_valid=1; ui_in=8'd80; #20; frame_start=0;
+        @(negedge clk);
+        frame_start = 1;
+        pix_valid = 1;
+        ui_in = 8'd80;
+        @(posedge clk);
+        @(negedge clk);
+        frame_start = 0;
         for (k=1; k<100; k=k+1) begin
             if (k==40) ui_in = 8'd160;
             else if (k==60) ui_in = 8'd230;
             else if (k==61) ui_in = 8'd160;
-            pix_valid=1; #20;
+            @(negedge clk);
+            pix_valid = 1;
+            @(posedge clk);
             $display("t=%0t pix=%0d out=%b flags={any:%0d bright:%0d dark:%0d edge:%0d} mag=%0d",
                 $time, ui_in, uo_out,
                 uo_out[7], uo_out[6], uo_out[5], uo_out[4], uo_out[3:0]);
@@ -269,7 +287,8 @@ module tb_um_ebeam_pixel_core;
                 pass_cnt = pass_cnt + 1;
             end
         end
-        pix_valid=0; #200;
+
+        pix_valid=0; #(10*CLK_PERIOD);
 
         // Switch to threshold mode: thresh=128
         spi_write(3'h0, 8'd128);
@@ -317,7 +336,7 @@ module tb_um_ebeam_pixel_core;
         passthrough_step(8'd128);
         passthrough_step(8'd200);
         passthrough_step(8'd255);
-        pix_valid = 1'b0; #100;
+        pix_valid = 1'b0; #(5*CLK_PERIOD);
 
         $display("CHECK_SUMMARY pass=%0d fail=%0d", pass_cnt, fail_cnt);
         if (fail_cnt != 0) $fatal;
