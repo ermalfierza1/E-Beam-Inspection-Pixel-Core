@@ -1,5 +1,5 @@
 // TinyTapeout user module: E-Beam Inspection Pixel Core
-// Author: Ermal (concept)
+// Author: Ermal Fierza
 // Description:
 //  - 8-bit pixel-in per cycle with pix_valid
 //  - Running mean (IIR) and local contrast |pixel - mean|
@@ -62,8 +62,7 @@ module tt_um_ebeam_pixel_core (
     localparam [7:0] DEF_EDGE_THR      = 8'd12;
     localparam [2:0] DEF_ALPHA_SHIFT   = 3'd3;    // 1/8 IIR
 
-    // Config register update path:
-    // Option B (SPI clocked by cfg_sclk) uses a CDC handshake to request writes into
+    // SPI clocked by cfg_sclk) uses a CDC handshake to request writes into
     // the clk domain. This keeps the datapath and configuration registers synchronous
     // to clk while allowing SPI to run as fast as cfg_sclk without missing edges.
     reg        spi_wr_toggle;
@@ -72,7 +71,12 @@ module tt_um_ebeam_pixel_core (
     reg        cfg_wr_toggle_ff1, cfg_wr_toggle_ff2, cfg_wr_toggle_ff2_d;
     reg  [2:0] cfg_wr_addr_ff1,   cfg_wr_addr_ff2;
     reg  [7:0] cfg_wr_data_ff1,   cfg_wr_data_ff2;
-    wire       cfg_wr_pulse = cfg_wr_toggle_ff2 ^ cfg_wr_toggle_ff2_d;
+    wire       cfg_wr_pulse = cfg_wr_toggle_ff2 ^ cfg_wr_toggle_ff2_d; // transition detector
+
+    // SPI domain completes a write → toggles spi_wr_toggle (could be anytime)
+    // Toggle propagates through synchronizers (2 clk cycles)
+    // XOR detects the change → generates one pulse
+    // Nothing happens until next SPI write (could be seconds later)
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -90,8 +94,8 @@ module tt_um_ebeam_pixel_core (
             reg_alpha_shift  <= DEF_ALPHA_SHIFT;
             reg_mode         <= 8'h00;
         end else begin
-            cfg_wr_toggle_ff1   <= spi_wr_toggle;
-            cfg_wr_toggle_ff2   <= cfg_wr_toggle_ff1;
+            cfg_wr_toggle_ff1   <= spi_wr_toggle;       // latched
+            cfg_wr_toggle_ff2   <= cfg_wr_toggle_ff1;   // dobule FF methode to avoid metastability
             cfg_wr_toggle_ff2_d <= cfg_wr_toggle_ff2;
 
             cfg_wr_addr_ff1     <= spi_wr_addr;
@@ -347,3 +351,4 @@ module tt_um_ebeam_pixel_core (
     end
 
 endmodule
+
