@@ -147,8 +147,8 @@ module tt_um_ebeam_pixel_core (
     reg  [63:0] spi_rd_bus_ff1;
     reg  [63:0] spi_rd_bus_ff2;
 
-    always @(posedge cfg_sclk) begin
-        if (!rst_n) begin
+    always @(posedge cfg_sclk or negedge rst_n_sclk) begin
+        if (!rst_n_sclk) begin
             spi_rd_bus_ff1 <= 64'h0;
             spi_rd_bus_ff2 <= 64'h0;
         end else begin
