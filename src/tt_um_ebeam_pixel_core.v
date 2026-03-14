@@ -166,12 +166,38 @@ module tt_um_ebeam_pixel_core (
     wire [7:0] spi_rd_reg6 = spi_rd_bus_ff2[55:48];
     wire [7:0] spi_rd_reg7 = spi_rd_bus_ff2[63:56];
 
+    // -----------------------------
+    // Reset synchronizer for cfg_sclk domain (2-FF chain)
+    // -----------------------------
+    // Purpose: Safely cross rst_n from the clk domain into the cfg_sclk domain
+    // to avoid metastability and SYNCASYNCNET warnings in synthesis.
+    //
+    // Operation:
+    //  - rst_n asserts asynchronously (negedge rst_n in sensitivity list)
+    //  - rst_n deassertion is synchronized through 2 FFs clocked by cfg_sclk
+    //  - FF1 may go metastable, but FF2 will be stable by the time it's used
+    //  - SPI state machine blocks use rst_n_sclk for their async reset
+    //
+    // Note: The spi_rd_bus synchronizer above uses rst_n directly with synchronous
+    // reset, which is acceptable since it's just a data CDC path.
+    reg rst_n_sclk_ff1, rst_n_sclk;
+    
+    always @(posedge cfg_sclk or negedge rst_n) begin
+        if (!rst_n) begin
+            rst_n_sclk_ff1 <= 1'b0;  // Assert reset immediately (async)
+            rst_n_sclk     <= 1'b0;
+        end else begin
+            rst_n_sclk_ff1 <= 1'b1;  // Deassert through synchronizer chain
+            rst_n_sclk     <= rst_n_sclk_ff1;
+        end
+    end
+
     wire [7:0] spi_shift_in_next = {spi_shift_in[6:0], cfg_mosi};
 
     reg cfg_cs_n_prev;
 
-    always @(posedge cfg_sclk or negedge rst_n) begin
-        if (!rst_n) begin
+    always @(posedge cfg_sclk or negedge rst_n_sclk) begin
+        if (!rst_n_sclk) begin
             cfg_cs_n_prev <= 1'b1;
             spi_shift_in  <= 8'h00;
             spi_bitcnt    <= 4'd0;
@@ -240,8 +266,8 @@ module tt_um_ebeam_pixel_core (
 
     // Mode-0 MISO timing: update/shift on falling edge so it is stable at the next
     // rising edge when the master samples.
-    always @(negedge cfg_sclk or negedge rst_n) begin
-        if (!rst_n) begin
+    always @(negedge cfg_sclk or negedge rst_n_sclk) begin
+        if (!rst_n_sclk) begin
             cfg_miso      <= 1'b0;
             spi_shift_out <= 8'h00;
         end else if (cfg_cs_n) begin
@@ -285,6 +311,7 @@ module tt_um_ebeam_pixel_core (
 
     // Optional threshold OUT or passthrough
     wire thresh_bit = (pixel_q >= reg_thresh);
+
     // Outputs pack
     reg [7:0] uo_out_r;
     assign uo_out = uo_out_r;
@@ -351,4 +378,3 @@ module tt_um_ebeam_pixel_core (
     end
 
 endmodule
-
