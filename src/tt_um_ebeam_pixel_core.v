@@ -147,7 +147,7 @@ module tt_um_ebeam_pixel_core (
     reg  [63:0] spi_rd_bus_ff1;
     reg  [63:0] spi_rd_bus_ff2;
 
-    always @(posedge cfg_sclk or negedge rst_n_sclk) begin
+    always @(posedge cfg_sclk) begin
         if (!rst_n_sclk) begin
             spi_rd_bus_ff1 <= 64'h0;
             spi_rd_bus_ff2 <= 64'h0;
@@ -178,25 +178,21 @@ module tt_um_ebeam_pixel_core (
     //  - FF1 may go metastable, but FF2 will be stable by the time it's used
     //  - SPI state machine blocks use rst_n_sclk for their async reset
     //
-    // Note: The spi_rd_bus synchronizer above uses rst_n directly with synchronous
-    // reset, which is acceptable since it's just a data CDC path.
-    reg rst_n_sclk_ff1, rst_n_sclk;
+    // Note: All cfg_sclk domain blocks use synchronous reset with rst_n_sclk.
+    // This is Yosys-friendly and avoids "unclocked register" warnings.
+    (* async_reg = "true" *) reg rst_n_sclk_ff1;
+    (* async_reg = "true" *) reg rst_n_sclk;
     
-    always @(posedge cfg_sclk or negedge rst_n) begin
-        if (!rst_n) begin
-            rst_n_sclk_ff1 <= 1'b0;  // Assert reset immediately (async)
-            rst_n_sclk     <= 1'b0;
-        end else begin
-            rst_n_sclk_ff1 <= 1'b1;  // Deassert through synchronizer chain
-            rst_n_sclk     <= rst_n_sclk_ff1;
-        end
+    always @(posedge cfg_sclk) begin
+        rst_n_sclk_ff1 <= rst_n;
+        rst_n_sclk     <= rst_n_sclk_ff1;
     end
 
     wire [7:0] spi_shift_in_next = {spi_shift_in[6:0], cfg_mosi};
 
     reg cfg_cs_n_prev;
 
-    always @(posedge cfg_sclk or negedge rst_n_sclk) begin
+    always @(posedge cfg_sclk) begin
         if (!rst_n_sclk) begin
             cfg_cs_n_prev <= 1'b1;
             spi_shift_in  <= 8'h00;
@@ -266,7 +262,7 @@ module tt_um_ebeam_pixel_core (
 
     // Mode-0 MISO timing: update/shift on falling edge so it is stable at the next
     // rising edge when the master samples.
-    always @(negedge cfg_sclk or negedge rst_n_sclk) begin
+    always @(negedge cfg_sclk) begin
         if (!rst_n_sclk) begin
             cfg_miso      <= 1'b0;
             spi_shift_out <= 8'h00;
