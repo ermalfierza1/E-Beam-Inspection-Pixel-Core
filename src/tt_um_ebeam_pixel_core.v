@@ -144,6 +144,18 @@ module tt_um_ebeam_pixel_core (
         reg_contrast_thr,
         reg_thresh
     };
+    
+    // Reset synchronizer for cfg_sclk domain
+    // Synchronizes rst_n from clk domain into cfg_sclk domain to avoid CDC issues
+    // Uses pure synchronous reset for proper simulation behavior
+    (* async_reg = "true" *) reg rst_n_sclk_ff1;
+    (* async_reg = "true" *) reg rst_n_sclk;
+    
+    always @(posedge cfg_sclk) begin
+        rst_n_sclk_ff1 <= rst_n;
+        rst_n_sclk     <= rst_n_sclk_ff1;
+    end
+    
     reg  [63:0] spi_rd_bus_ff1;
     reg  [63:0] spi_rd_bus_ff2;
  
@@ -165,16 +177,6 @@ module tt_um_ebeam_pixel_core (
     wire [7:0] spi_rd_reg5 = spi_rd_bus_ff2[47:40];
     wire [7:0] spi_rd_reg6 = spi_rd_bus_ff2[55:48];
     wire [7:0] spi_rd_reg7 = spi_rd_bus_ff2[63:56];
- 
-    // Reset synchronizer for cfg_sclk domain
-    // Synchronizes rst_n from clk domain into cfg_sclk domain to avoid CDC issues
-    // Uses synchronous reset for Yosys compatibility
-    reg rst_n_sclk_ff1, rst_n_sclk;
-    
-    always @(posedge cfg_sclk) begin
-        rst_n_sclk_ff1 <= rst_n;
-        rst_n_sclk     <= rst_n_sclk_ff1;
-    end
  
     wire [7:0] spi_shift_in_next = {spi_shift_in[6:0], cfg_mosi};
  
